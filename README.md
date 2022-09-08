@@ -214,6 +214,11 @@ to modify this file to define a new operator node.
 
 ### 2.3 Adding a grammar rule the operator
 
+Now that we've defined a token for the operator and added support for
+the operator in the AST, we can write a grammar rule for the PEG parser
+that tells it _when_ and _how_ to produce a `BinOp` AST node that
+includes the `CallPipe` operator from the stream of tokens it's parsing.
+
 
 
 [cpython-v3.10.7]: https://github.com/python/cpython/tree/v3.10.7
