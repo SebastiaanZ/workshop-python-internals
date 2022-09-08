@@ -50,6 +50,8 @@ that is included in the `cpython/v3.9.14` branch in this repository.
 
 ## 2. From Source Code to Abstract Syntax Tree
 
+![Code to AST](/img/code-to-ast-bg.png "From Code to Abstract Syntax Tree")
+
 In this part of the workshop, which should take you roughly half of the
 scheduled time, our goal is to get from "raw source code" to something
 called an [Abstract Syntax Tree (AST)][wikipedia-ast]. An AST is a tree
