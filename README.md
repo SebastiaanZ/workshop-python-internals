@@ -18,7 +18,7 @@ understanding of the Python internals. This means that we're going to
 take some shortcuts in our implementation just so we can make the entire
 journey.
 
-This workshop uses **CPython 3.10.7**.
+This workshop uses **[`CPython 3.10.7`][cpython-v3.10.7]**.
 
 ### 1.1 The new operator
 
@@ -143,20 +143,84 @@ names are merely descriptions of the characters that make up the tokens
 rather than "meaningful" names like "division". This is because these
 are merely tokens without syntax and semantics.
 
-**:joystick: Exercise:**
+### :joystick: Exercise 1 ###
 - Try defining a token for the new operator by following the
 example of existing tokens.
 - After defining your token, regenerate the tokenizer:
   - Windows: `PCbuild\build.bat --regen` (may take a while the first
     time).
-  - Linux/Mac: `make --regen-token`
+  - Linux/Mac: `make regen-token`
 - Test your new token by running the tokenizer again (see previous
-  sections).
+  sections). The character sequence `|>` should now be recognized as a
+  single toke.
+
+### 2.2 Adding AST support for the operator
+
+Python's PEG parser will take the stream of tokens produced by the
+tokenizer and turn it into an Abstract Syntax Tree. However, before we
+can implement and compile a new grammar rule for the new operator, we
+need to add support for the new operator to the AST.
+
+More specifically, we need to create an AST node class that can
+represent our operator in a binary expression (represented by a `BinOp`
+node in the AST). The binary expression `10 |> double` should eventually
+be translated into a tree structure like this:
+
+![AST CallPipe Node](/img/ast-node-for-callpipe-bg.png "AST Node for our operator")
+
+As you can see, this `BinOp` node represents the binary expression by
+keeping track of the operant to the left of the operator, the operant
+to the right of the operator, as well as the operator that combines the
+two. The problem is that the node class `CallPipe` does not exist yet,
+so we can't actually make an AST yet that uses it.
+
+#### 2.2.1 Adding a binary operator node
+
+Luckily, adding such a node class is easy: We don't actually have to
+write any code. All the necessary AST types are generated from a
+definition file written in the
+[Zephyr Abstract Syntax Definition Language][zephyr-asdl]. We are going
+to modify this file to define a new operator node.
+
+### :joystick: Exercise 2 ###
+
+- Open the file `Parser/Python.asdl` and look at lines 99-100:
+
+```
+    operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
+                | RShift | BitOr | BitXor | BitAnd | FloorDiv
+```
+
+- Try modifying this definition in such a way that the generator will
+  generate a `CallPipe` node, in addition to the operator nodes already
+  defined here.
+
+- Regenerate the AST:
+  - Windows: `PCbuild\build.bat --regen`
+  - Mac/Linux: `make regen-ast`
+
+- Recompile Python for your platform.
+  - You may get a warning that `CallPipe` is not handled in a switch
+    statement. You can ignore this for now, as we'll take care of it
+    later by modifying Python's compiler.
+
+- Run your newly compiled version of Python and check if it worked:
+
+```python-repl
+>>> import ast
+>>> ast.CallPipe
+<class 'ast.CallPipe'>
+```
+
+### 2.3 Adding a grammar rule the operator
 
 
+
+[cpython-v3.10.7]: https://github.com/python/cpython/tree/v3.10.7
 [elixer-pipe-operator]: https://elixirschool.com/en/lessons/basics/pipe_operator
 [devguide-setup-building]: https://devguide.python.org/getting-started/setup-building/
 [real-python-guide-cpython-source]: https://realpython.com/cpython-source-code-guide/
 [wikipedia-ast]: https://en.wikipedia.org/wiki/Abstract_syntax_tree
 [py-glossary-bytecode]: https://docs.python.org/3/glossary.html#term-bytecode
 [ellipsis]: https://docs.python.org/3/library/constants.html#Ellipsis
+[zephyr-asdl]: http://asdl.sourceforge.net/
