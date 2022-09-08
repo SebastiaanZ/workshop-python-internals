@@ -215,10 +215,366 @@ to modify this file to define a new operator node.
 ### 2.3 Adding a grammar rule the operator
 
 Now that we've defined a token for the operator and added support for
-the operator in the AST, we can write a grammar rule for the PEG parser
-that tells it _when_ and _how_ to produce a `BinOp` AST node that
-includes the `CallPipe` operator from the stream of tokens it's parsing.
+the operator in the AST, we need to write a grammar rule for the PEG
+parser. The grammar rule will tell the parser when to add a `BinOp` node
+that includes a `CallPipe` operator node to the Abstract Syntax Tree
+its creating.
 
+Obviously, to add a grammar rule, we need to know a bit about how
+Python's Parsing Expression Grammar (PEG) parser works and how you
+define rules for it. Since this is quite an extensive topic, this
+workshop will focus on the grammar constructs that we need to implement
+the grammar rule for the new operator.
+
+If you want to know more about Python's PEG parser, please refer to the
+[excellent devguide page about the parser][peg-parser] written by Pablo
+Galindo Salgado.
+
+#### 2.3.1 A short and simplified introduction to Python's Grammar
+
+**Note:** This introduction is extremely simplified, takes shortcuts,
+suffers from blatant omissions, and focuses only on those parts that
+we need to write the grammar rule for our new operator.
+
+
+Python's grammar consists of rules that follow the form:
+```
+rule_name: grammar_expression
+```
+
+The grammar expression syntax is very flexible but also fairly simple:
+There is [a limited number of syntactic rules][grammar-expressions] that
+you can combine to create complex grammar rules. For the new operator,
+we will need to use a few of those rules.
+
+
+##### `e1 e2`
+The first rule is simple: You can combine subexpressions with a space
+like this:
+
+```
+some_rule: first_expression second_expression
+```
+
+This means that to match `some_rule`, the incoming stream of tokens
+first has to match `e1` and then `e2`. Note that this is not _just_ an
+"AND"-rule, as the order is critical as well.
+
+##### `e1 | e2`
+You can also match alternatives:
+
+```
+some_rule: first_alternative | second_alternative
+```
+
+This rule will first try to match `first_alternative` and if that works,
+we've matched this rule. If and only if the `first_alternative` fails to
+match will the parser consider `second_alternative`.
+
+You'll see a lot of rules that have alternatives, like this simplified
+`sum` rule:
+```
+sum:
+    | number '+' number
+    | number '-' number
+    | number
+```
+
+In this rule, the `'+'` and `'-'` match a literal `+` and `-` character
+respectively. Also note that within each alternative, the first rule is
+used to ensure that, say, we first match a `number`, then match a `+`,
+and finally match another `number` for the first alternative.
+
+##### Rules may reference other rules
+
+Another thing you'll notice is that most rules reference other rules
+in one or more of their alternatives. This is essential: Once the parser
+starts matching a rule, it will only consider the alternatives you
+defined there. If a rule isn't referenced by any other rule, it will
+never be considered by the parser (except the rules that serve as
+entrypoints for the parser).
+
+In fact, if you look at the `sum` rule above, it already references
+another rule, `number`, which could potentially be defined as:
+
+```
+number:
+    | NUMBER
+    | text
+```
+
+In this example, `NUMBER` would match a `NUMBER` token in the stream
+of token received by the parser from the tokenizer.
+
+If the current token being parsed is not a `NUMBER` token, the second
+alternative kicks in, which makes the parser consider the `text` rule
+instead. This creates a natural flow or descent down the grammar rules,
+but also defines which grammar rules are considered first, which 
+influences things like operator precedence or the need for grouping in
+your code.
+
+##### Putting it all together
+
+While this is just a small selection of syntax rules of Python's
+grammar, we can already build powerful grammar rules with it.
+
+Let's consider a very simple grammar with just two rules:
+
+```
+sum:
+    | atom '+' atom
+    | atom
+
+atom:
+    | NUMBER
+```
+
+If we assume that `NUMBER` refers to the `NUMBER` token, it is fairly
+trivial to see that these rules can match the following stream of
+tokens:
+
+```
+1
+```
+
+The parser would first consider the first alternative of `sum`, which is
+`atom '+' atom`. This rule will fail, as there is no literal `+`
+character in the stream of tokens. Once this fails, the parser will try
+the second alternative, which is just the `atom` rule on its one and
+that will lead to a match, as the `atom` rule is just a `NUMBER` token
+on its own. Likewise, no one will be surprised that the rules can match
+`1 + 1`, as this perfectly fits the first alternative of the `sum` rule.
+
+Now consider the following stream of tokens:
+
+```
+1 + 2 + 3
+```
+
+Are the rules able to match this expression? Do think about it for a
+moment before reading on.
+
+The answer is "no". The problem is that the parser will start matching
+the stream of tokens just fine, as the first part, `1 + 2`, will match
+the first alternative of the `sum` rule just fine. However, after that
+rule is matched, those tokens are consumed, which leaves us with `+ 3`.
+As there is no rule that starts with a `'+'`, the grammar can't match
+this part. So what should we do to support this?
+
+We could add another alternative to the sum rule:
+
+```
+sum:
+    | atom '+' atom '+' atom
+    | atom '+' atom
+    | atom
+
+atom:
+    | NUMBER
+```
+
+Now the expression `1 + 2 + 3` can be matched, but what about
+`1 + 2 + 3 + 4`? Or `1 + 2 + 3 + 4 + 5`? What if we want to match an
+expression with an arbitrary number of pluses? Adding an infinite number
+of alternatives is not going to be fun. Clearly, we're missing something
+to help us here.
+
+As always, the answer here is recursion. The only thing we need to tweak
+is the very first part of the first alternative of the `sum` rule:
+
+```
+sum:
+    | sum '+' atom
+    | atom
+
+atom:
+    | NUMBER
+```
+
+Now, the first alternative of the `sum` rule _may contain itself_. This
+means that we can match `1 + 2`, as `1` is a valid alternative of the
+`sum` rule (the second one), but also `1 + 2 + 3`, as `1 + 2` we've just
+established that `1 + 2` is a valid alternative of the sum rule`, so 
+`some_matched_sum + 3` is also a valid alternative of the sum rule.
+
+And if you think about it, this is precisely the kind of structure that
+we'd need to be able to match for our pipe operator, as our "pipelines"
+can become arbitrarily long:
+
+```
+1 |> double |> double |> double |> triple |> print
+```
+
+### 2.3.2 Writing the grammar rule
+
+Now it's time to write the grammar rule for the pipe operator. You can
+find Python's grammar rules in the file `Grammar/python.gram`. Take a
+moment to scroll through the file, but don't feel bad if you feel
+overwhelmed; Python's grammar is huge and has grown considerably in size
+in the last few versions.
+
+To simplify the matter, we are going to add our grammar rule between the
+`shift_expr` rule (lines 646-649) and `sum` (lines 651-554). Compared to
+the grammar rules above, you'll notice that these rules have a few extra
+bits, like `[expr_ty]` and `{ _PyAST_BinOp(a, Add, b, EXTRA) }`. The
+former just means that matching this rule will return an expression type
+and the latter is something we'll see later. You may ignore those bits
+for now.
+
+### :joystick: Exercise 3 ###
+
+- As a start, add this rule template between the two rules:
+
+```
+shift_expr[expr_ty]:
+    | a=shift_expr '<<' b=sum { _PyAST_BinOp(a, LShift, b, EXTRA) }
+    | a=shift_expr '>>' b=sum { _PyAST_BinOp(a, RShift, b, EXTRA) }
+    | sum
+
+pipe[expr_ty]:
+    |
+    | sum
+    
+sum[expr_ty]:
+    | a=sum '+' b=term { _PyAST_BinOp(a, Add, b, EXTRA) }
+    | a=sum '-' b=term { _PyAST_BinOp(a, Sub, b, EXTRA) }
+    | term
+```
+
+- Now try writing a grammar rule that would match valid expressions that
+  use the pipe operator. Some things to consider:
+  - You can use `'|>'` to match the operator itself, just like the `sum`
+    rule uses `'+'`.
+  - Think about how the grammar rules cascade down: The `sum` rule is
+    only ever considered because it's referenced by the `shift_expr`
+    rule. Try to modify the `shift_expr` rule to make the parser
+    consider the `pipe` rule which, in turn, should make the parser
+    consider the `sum` rule.
+  - How could you use recrusion to match an arbitrary number of pipe
+    operators in a "pipeline"?
+  - Don't worry about things like `{ _PyAST_BinOp(a, Add, b, EXTRA) }`
+    in this exercise.
+
+### 2.3.3 Grammar Actions
+
+After writing your grammar rule, the parser will be able to match an
+expression that includes a pipe operator. Still, it doesn't yet know how
+to turn what it has matched into an Abstract Syntax Tree node. This is
+where [Grammar Actions][grammar-actions] come to the rescue. Grammar
+actions are just small snippets of C-code that tell the parser what it
+should do with the things it has matched.
+
+As you have probably guessed by now, this is where the curly braces come
+into play: They allow you to embed snippets of C that get executed to do
+the work of creating the necessary AST nodes (and so on).
+
+If you look at the first alternative of the `sum` rule, it defines the
+grammar action `{ _PyAST_BinOp(a, Add, b, EXTRA) }` that gets executed
+whenever that alternative is matched. This grammar action just calls a
+special C function, `_PyAST_BinOp` that will create the actual `BinOp`
+AST node that we need. 
+
+Obviously, that function can only create the `BinOp` node if it knows
+which operator was used and what was to the left/right of the operator.
+As we know that this grammar action gets executed if we matched the
+first alternative of the `sum` rule, we know that the appropriate
+operator AST node is `Add` (which is part of the `operator` list you've
+seen in exercise 2).
+
+However, to know the left and the right operant, we actually need to
+know what was matched. This is what the `a=` and `b=` in the rule do:
+They assign names to whatever was matched on the left-hand side and the
+right-hand side of the operator respectively. Once we've assigned those
+names, we can simply pass them in as arguments within the grammar
+action.
+
+The `EXTRA` argument in the `PyAST_BinOp` is a special macro that passes
+parser context into the function, things like line number and column
+number, but we're not going to dive into that in this workshop.
+
+### :joystick: Exercise 4 ###
+
+- Copy the grammar action of the first `sum` alternative and paste it
+  as the grammar action of the first alternative of the `pipe` rule.
+
+- Make sure that you change the operator, `Add`, to the operator we've
+  defined in exercise 2.
+
+- Assign the names `a` and `b` to the left-hand side and the right-hand
+  side of the operator in the grammar expression respectively.
+
+- Regenerate Python's PEG parser including the new rule:
+  - Windows: `PCbuild\build.bat --regen`
+  - Mac/Linux: `make regen-pegen`
+
+- Compile Python to make it include the new parser.
+
+- Start your newly compiled Python and test if it works:
+
+```python-repl
+>>> import ast
+>>> tree = ast.parse("10 |> double")
+>>> tree.body[0].value
+<ast.BinOp object at 0x0000026C86862DA0>
+>>> tree.body[0].value.op
+<ast.CallPipe object at 0x0000026C86BE6580>
+```
+
+What doesn't work is actually trying to use the expression:
+```python-repl
+>>> def double(number): return 2 * number
+... 
+>>> 10 |> double
+SystemError: binary op 14 should not be possible
+```
+
+This is because there is no actual implementation for this binary
+operator yet.
+
+### 2.5 Solutions for this part
+
+This section contains the changes that you had to make to create support
+for the pipe operator in Python's tokenizer, grammar, and AST.
+
+#### 2.5.1 File `Grammar/Tokens`
+Add the following line:
+```
+VBARGREATER             '|>'
+```
+(Picking another name for the token is fine.)
+
+#### 2.5.2 File `Parser/python.asdl`
+
+Add `CallPipe` to the `operator` list on lines 99-100:
+```
+    operator = Add | Sub | Mult | MatMult | Div | Mod | Pow | LShift
+                 | RShift | BitOr | BitXor | BitAnd | FloorDiv | CallPipe
+```
+
+#### 2.5.3 File `Grammar/python.gram`
+
+Add the grammar rule `pipe` and make sure `shift_expr` (lines 656-659) 
+refers to it in ALL its alternatives:
+```
+shift_expr[expr_ty]:
+    | a=shift_expr '<<' b=pipe { _PyAST_BinOp(a, LShift, b, EXTRA) }
+    | a=shift_expr '>>' b=pipe { _PyAST_BinOp(a, RShift, b, EXTRA) }
+    | pipe
+
+pipe[expr_ty]:
+    | a=pipe '|>' b=sum { _PyAST_BinOp(a, CallPipe, b, EXTRA) }
+    | sum
+
+sum[expr_ty]:
+    | a=sum '+' b=term { _PyAST_BinOp(a, Add, b, EXTRA) }
+    | a=sum '-' b=term { _PyAST_BinOp(a, Sub, b, EXTRA) }
+    | term
+```
+
+Note: the `sum` rule is unchanged but was included to help you find the
+right location in the file to add the `pipe` rule.
+
+## 2. From Abstract Syntax Tree to Bytecode
 
 
 [cpython-v3.10.7]: https://github.com/python/cpython/tree/v3.10.7
@@ -229,3 +585,6 @@ includes the `CallPipe` operator from the stream of tokens it's parsing.
 [py-glossary-bytecode]: https://docs.python.org/3/glossary.html#term-bytecode
 [ellipsis]: https://docs.python.org/3/library/constants.html#Ellipsis
 [zephyr-asdl]: http://asdl.sourceforge.net/
+[peg-parser]: https://devguide.python.org/internals/parser/
+[grammar-expressions]: https://devguide.python.org/internals/parser/#syntax
+[grammar-actions]: https://devguide.python.org/internals/parser/#grammar-actions
