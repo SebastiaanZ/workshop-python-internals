@@ -18,7 +18,7 @@ understanding of the Python internals. This means that we're going to
 take some shortcuts in our implementation just so we can make the entire
 journey.
 
-This workshop uses **CPython 3.9.14**.
+This workshop uses **CPython 3.10.7**.
 
 ### 1.1 The new operator
 
@@ -31,22 +31,34 @@ operator allows us to call the callable like `argument |> function`.
 This would allow us to build a
 pipeline of function calls:
 
-```python-repl
->>> def double(number: int) -> int:
-...     return number * 2
+```python
+def double(number: int) -> int:
+   return number * 2
 
->>> 1 |> double |> double |> double |> print
-8
+1 |> double |> double |> double |> print  # prints 8
 ```
 
-### 1.2 Prerequisites
+### 1.2 Setting up your development environment
 
 Please make sure that you can compile CPython from source in your
 development environment. Refer to
-[the "setup building" page][devguide-setup-building] in the Python
-Developer's Guide for more information on how to set up your system. A
-good test would be to try and compile the version of Python (`v3.9.14`)
-that is included in the `cpython/v3.9.14` branch in this repository.
+[the "Setup and Building" page][devguide-setup-building] in the Python
+Developer's Guide or [this article][real-python-guide-cpython-source]
+published by Real Python for more information on how to set up your
+system.
+
+A good test would be to try and compile the version of Python
+(`v3.10.7`) that is used in this workshop.
+
+### 1.3 Preparation
+
+- Create a branch from the `v3.10.7` tag and switch to it.
+
+  - Windows: Make sure that you run the `PCBuild\get_externals.bat` that
+    is included in the latest commit of this new branch.
+
+- Compile Python for the first time from this "clean" state.
+  - See section 1.2 for resources on how to compile Python.
 
 ## 2. From Source Code to Abstract Syntax Tree
 
@@ -68,6 +80,8 @@ changes to CPython:
 
 ### 2.1 A new token for the tokenizer
 
+![Text to tokens](/img/text-to-tokens-bg.png "From text to tokens")
+
 When you type your source code into your editor or IDE, you are just
 typing text. This seems trivial, but this means that when Python starts
 reading your source file, it initially just reads a stream of
@@ -82,23 +96,32 @@ an Ellipsis.
 
 #### 2.1.1 Exploring the tokenizer
 
-Create a temporary python module, say `my_module.py`, that contains the
-following Python code:
+Create a python module, say `my_module.py`, in the root of the
+repository that contains the following Python code:
 
 ```python
-def double(number: int) -> int:
+def double(number):
     return number * 2
 
 
 doubled_number = double(10)
-print(doubled_number)
 ```
 
 Open a terminal and navigate to the folder containing the temporary
 module. Now run the command `python -m tokenize -e my_module.py` (
-substitute the `python` command by the command you use to run Python
-3.9 on your system). This should show you the output of the tokenizer,
+substitute the `python` command with the path to Python executable that
+you compiled earlier[^1]). This should show you the output of the tokenizer,
 a stream of tokens parsed from your module.
+
+Note: The `-e` option of the `tokenize` module ensures that we get exact
+token names instead of more general token names.
+
+[^1]: On Windows, a convenience entrypoint for your compiled Python
+executable will be placed in the root of the repository named
+`python.bat`. On Mac/Linux, an executable file called `python` will be
+placed in the root directory of the repository after running `make`.
+
+#### 2.1.2 A missing token
 
 Now change the line `doubled_number = double(10)` to
 `doubled_number = 10 |> double` and run the tokenizer again. You should
@@ -107,10 +130,33 @@ was not recognized as a single token. Rather, the individual characters
 that make up the operator were recognized as separate tokens, a `VBAR`
 token for `|` and a `GREATER` token for `>`. 
 
+This is not what we want: Our operator should be an atom, a single
+irreducible unit of Python code and the character sequence `|>` should 
+get translated to a single token.  That's why the first step in
+implementing the operator is adding a token for the operator.
+
+#### 2.1.3 Add a token for the operator
+
+Take a look at the `Grammar\Tokens` file in the repository. This file
+contains the definitions for various tokens. Note that most of the token
+names are merely descriptions of the characters that make up the tokens
+rather than "meaningful" names like "division". This is because these
+are merely tokens without syntax and semantics.
+
+**:joystick: Exercise:**
+- Try defining a token for the new operator by following the
+example of existing tokens.
+- After defining your token, regenerate the tokenizer:
+  - Windows: `PCbuild\build.bat --regen` (may take a while the first
+    time).
+  - Linux/Mac: `make --regen-token`
+- Test your new token by running the tokenizer again (see previous
+  sections).
 
 
 [elixer-pipe-operator]: https://elixirschool.com/en/lessons/basics/pipe_operator
 [devguide-setup-building]: https://devguide.python.org/getting-started/setup-building/
+[real-python-guide-cpython-source]: https://realpython.com/cpython-source-code-guide/
 [wikipedia-ast]: https://en.wikipedia.org/wiki/Abstract_syntax_tree
 [py-glossary-bytecode]: https://docs.python.org/3/glossary.html#term-bytecode
 [ellipsis]: https://docs.python.org/3/library/constants.html#Ellipsis
