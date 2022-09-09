@@ -20,7 +20,7 @@ journey.
 
 This workshop uses **[`CPython 3.10.7`][cpython-v3.10.7]**.
 
-### 1.1 The new operator
+### 1.1. The new operator
 
 The operator that we are going to implement is a
 [pipe operator][elixer-pipe-operator]. This new binary operator will
@@ -38,7 +38,7 @@ def double(number: int) -> int:
 1 |> double |> double |> double |> print  # prints 8
 ```
 
-### 1.2 Setting up your development environment
+### 1.2. Setting up your development environment
 
 Please make sure that you can compile CPython from source in your
 development environment. Refer to
@@ -50,7 +50,7 @@ system.
 A good test would be to try and compile the version of Python
 (`v3.10.7`) that is used in this workshop.
 
-### 1.3 Preparation
+### 1.3. Preparation
 
 - Create a branch from the `v3.10.7` tag and switch to it.
 
@@ -59,6 +59,8 @@ A good test would be to try and compile the version of Python
 
 - Compile Python for the first time from this "clean" state.
   - See section 1.2 for resources on how to compile Python.
+
+---
 
 ## 2. From Source Code to Abstract Syntax Tree
 
@@ -78,7 +80,7 @@ changes to CPython:
 - Add a grammar rule for the operator to the PEG parser
 - Add a node class for the operator to the AST types
 
-### 2.1 A new token for the tokenizer
+### 2.1. A new token for the tokenizer
 
 ![Text to tokens](/img/text-to-tokens-bg.png "From text to tokens")
 
@@ -94,7 +96,7 @@ an example, if you type in `...` (the literal for the built-in constant
 token. If you were to take away just a single dot, it would no longer be
 an Ellipsis.
 
-#### 2.1.1 Exploring the tokenizer
+#### 2.1.1. Exploring the tokenizer
 
 Create a python module, say `my_module.py`, in the root of the
 repository that contains the following Python code:
@@ -121,7 +123,7 @@ executable will be placed in the root of the repository named
 `python.bat`. On Mac/Linux, an executable file called `python` will be
 placed in the root directory of the repository after running `make`.
 
-#### 2.1.2 A missing token
+#### 2.1.2. A missing token
 
 Now change the line `doubled_number = double(10)` to
 `doubled_number = 10 |> double` and run the tokenizer again. You should
@@ -135,7 +137,7 @@ irreducible unit of Python code and the character sequence `|>` should
 get translated to a single token.  That's why the first step in
 implementing the operator is adding a token for the operator.
 
-#### 2.1.3 Add a token for the operator
+#### 2.1.3. Add a token for the operator
 
 Take a look at the `Grammar\Tokens` file in the repository. This file
 contains the definitions for various tokens. Note that most of the token
@@ -154,7 +156,7 @@ example of existing tokens.
   sections). The character sequence `|>` should now be recognized as a
   single toke.
 
-### 2.2 Adding AST support for the operator
+### 2.2. Adding AST support for the operator
 
 Python's PEG parser will take the stream of tokens produced by the
 tokenizer and turn it into an Abstract Syntax Tree. However, before we
@@ -174,7 +176,7 @@ to the right of the operator, as well as the operator that combines the
 two. The problem is that the node class `CallPipe` does not exist yet,
 so we can't actually make an AST yet that uses it.
 
-#### 2.2.1 Adding a binary operator node
+#### 2.2.1. Adding a binary operator node
 
 Luckily, adding such a node class is easy: We don't actually have to
 write any code. All the necessary AST types are generated from a
@@ -212,7 +214,7 @@ to modify this file to define a new operator node.
 <class 'ast.CallPipe'>
 ```
 
-### 2.3 Adding a grammar rule the operator
+### 2.3. Adding a grammar rule the operator
 
 Now that we've defined a token for the operator and added support for
 the operator in the AST, we need to write a grammar rule for the PEG
@@ -230,7 +232,7 @@ If you want to know more about Python's PEG parser, please refer to the
 [excellent devguide page about the parser][peg-parser] written by Pablo
 Galindo Salgado.
 
-#### 2.3.1 A short and simplified introduction to Python's Grammar
+#### 2.3.1. A short and simplified introduction to Python's Grammar
 
 **Note:** This introduction is extremely simplified, takes shortcuts,
 suffers from blatant omissions, and focuses only on those parts that
@@ -405,7 +407,7 @@ can become arbitrarily long:
 1 |> double |> double |> double |> triple |> print
 ```
 
-### 2.3.2 Writing the grammar rule
+### 2.3.2. Writing the grammar rule
 
 Now it's time to write the grammar rule for the pipe operator. You can
 find Python's grammar rules in the file `Grammar/python.gram`. Take a
@@ -455,7 +457,7 @@ sum[expr_ty]:
   - Don't worry about things like `{ _PyAST_BinOp(a, Add, b, EXTRA) }`
     in this exercise.
 
-### 2.3.3 Grammar Actions
+### 2.3.3. Grammar Actions
 
 After writing your grammar rule, the parser will be able to match an
 expression that includes a pipe operator. Still, it doesn't yet know how
@@ -531,19 +533,19 @@ SystemError: binary op 14 should not be possible
 This is because there is no actual implementation for this binary
 operator yet.
 
-### 2.5 Solutions for this part
+### 2.5. Solutions for this part
 
 This section contains the changes that you had to make to create support
 for the pipe operator in Python's tokenizer, grammar, and AST.
 
-#### 2.5.1 File `Grammar/Tokens`
+#### 2.5.1. File `Grammar/Tokens`
 Add the following line:
 ```
 VBARGREATER             '|>'
 ```
 (Picking another name for the token is fine.)
 
-#### 2.5.2 File `Parser/python.asdl`
+#### 2.5.2. File `Parser/python.asdl`
 
 Add `CallPipe` to the `operator` list on lines 99-100:
 ```
@@ -551,7 +553,7 @@ Add `CallPipe` to the `operator` list on lines 99-100:
                  | RShift | BitOr | BitXor | BitAnd | FloorDiv | CallPipe
 ```
 
-#### 2.5.3 File `Grammar/python.gram`
+#### 2.5.3. File `Grammar/python.gram`
 
 Add the grammar rule `pipe` and make sure `shift_expr` (lines 656-659) 
 refers to it in ALL its alternatives:
@@ -574,7 +576,91 @@ sum[expr_ty]:
 Note: the `sum` rule is unchanged but was included to help you find the
 right location in the file to add the `pipe` rule.
 
-## 2. From Abstract Syntax Tree to Bytecode
+---
+
+## 3. From Abstract Syntax Tree to Bytecode
+
+At this point, Python's parser can take an expression containing the new
+pipe operator and turn it into the relevant Abstract Syntax Tree nodes.
+Now we are going to add support to the compiler so that it can compile
+the generated AST into an intermediate language called
+[bytecode][term-bytecode]. This is the language that actually gets
+interpreted by the evaluation loop.
+
+### 3.1. Bytecode
+
+Bytecode is an intermediate language that in its core is a long sequence
+of instructions or"operation codes ("opcodes") for the interpreter. Each
+instruction tells the interpreter to do "something", like getting the
+value that a name was assigned to (`LOAD_NAME` or `LOAD_FAST`) or adding
+two value together (`BINARY_ADD`).
+
+Each instruction takes up two bytes in the bytecode, which means that
+they can, very conveniently, be represented as an unsigned short
+integer, although we often refer to them by their human-readable name.
+If you've completed a few puzzles of the
+[Advent of Code 2019][aoc-2019], this should feel very familiar to you:
+Bytecode is very similar to the input for the `intcode` computer/virtual
+machine that you were asked to code there.
+
+### :joystick: Exercise 5 ###
+
+We're going to look at the disassembled bytecode for a "compiled"
+object, like a function, class, method, or generator, using the `dis`
+module from Python's standard library.
+
+- Open a Python REPL/Interactive shell and type in the following:
+
+```python-repl
+>>> import dis
+>>> dis.dis(lambda x, y: 2 * x + y)
+```
+
+- Try to understand the disassembled bytecode instructions for the
+  _body_ of the function created with the `lambda`-expression. To help
+  you, this would be the equivalent function definition (minus the
+  function name):
+
+```python
+def anonymous_lambda_function(x, y):
+    return 2 * x + y
+```
+
+### 3.1.1 Adding an opcode for the operator
+
+The compiler needs to be able to compile the AST node for the new
+operator into a bytecode instruction or opcode. There's just one tiny
+problem: The opcode for our operator doesn't exist yet[^2], so we'll
+have to define it before we can modify the compiler.
+
+[^2]: In reality, we do already have an opcode for calling a function,
+which is what our operator does. However, for educational purposes, we
+are going to ignore that and add our own.
+
+### :joystick: Exercise 5 ###
+
+- Open the file `Lib/opcode.py`, which is the only Python-file that we
+  are going to modify today, and scroll through the contents.
+
+As you might have noticed, the interface for defining an opcode is very
+simple: You simply add a function call to `def_op` and pass in the
+human-readable name of the opcode and its integer value. **There is one
+catch:** The constant on line 121, `HAVE_ARGUMENT`, is important, as it
+specifies that all the opcodes with that integer value and higher have
+an additional argument. The opcode that we are going to define for our
+operator does **not** take an argument, so we have to take this constant
+into account.
+
+### :joystick: Exercise 6 ###
+
+- Add an opcode for our operator using the name `"BINARY_CALL_PIPE"`
+  - Make sure to give it an integer value below `HAVE_ARGUMENT`. Note
+    that the empty lines between the groups represent gaps in the
+    opcodes that are taken.
+
+- Regenerate Python's opcode tables:
+  - Windows: `PCbuild\build.bat --regen`
+  - Mac/Linux: `make regen-opcode`
 
 
 [cpython-v3.10.7]: https://github.com/python/cpython/tree/v3.10.7
@@ -588,3 +674,5 @@ right location in the file to add the `pipe` rule.
 [peg-parser]: https://devguide.python.org/internals/parser/
 [grammar-expressions]: https://devguide.python.org/internals/parser/#syntax
 [grammar-actions]: https://devguide.python.org/internals/parser/#grammar-actions
+[term-bytecode]: https://docs.python.org/3/glossary.html#term-bytecode
+[aoc-2019]: https://adventofcode.com/2019
