@@ -678,23 +678,24 @@ expression type node, including expressions with a binary operator like
 our pipe operator. 
 
 ```C
+// File: Python/compile.c, starting at line 5180.
 static int compiler_visit_expr1(struct compiler *c, expr_ty e)
 {
     switch (e->kind) {
-    // Other cases removed
+    // Other cases removed for brevity
     case BinOp_kind:
         VISIT(c, expr, e->v.BinOp.left);
         VISIT(c, expr, e->v.BinOp.right);
         ADDOP(c, binop(e->v.BinOp.op));
         break;
     }
-    // Other cases removed
+    // Other cases removed for brevity
 }
 ```
 
 The `switch` block here has a `case` for expressions of the `BinOp_kind`
-that instructs the compiler what it should do when it encounters this
-kind of expression.
+that instructs the compiler what it should do when it encounters a
+binary expression.
 
 It's important to note that the first thing the compiler is instructed
 to do is to VISIT the left-hand side of the operator so it can write the
@@ -708,6 +709,105 @@ is applied to. The order in which we visit these operants, left before
 right, will be important later.
 
 ### 3.3.1. Compiling CallPipe operators
+
+Now that we've identified the part of the compiler that handles binary
+operators, we can add support for our `CallPipe` AST node. As you can
+see above, we will add an opcode with `ADDOP` and determine which opcode
+to write by calling the function `binop`
+
+This `binop` function, starting at line 3607 in `Python/compile.c`,
+consists of a large `switch` block that has a `case` for all types of
+operator nodes. Except for our `CallPipe` node, that is.
+
+### :joystick: Exercise 7 ###
+
+- Open the file `Python/compiler.c` and scroll to the function `binop`
+  at line 3607. 
+
+- Read through the cases and note that there's a case for each AST
+  operator node defined in `Parser/Python.asdl` (see also exercise 2)
+  that maps that operator to an opcode.
+
+- Add a case for the `CallPipe` AST node and make it return the opcode
+  you defined in exercise 6.
+
+### 3.3.2. Defining the stack effect of our operator
+
+There's one additional thing that we need to modify in the compiler to
+make it work: The effect that an opcode has on the **value stack**. The
+value stack is a stack that the evaluation loop will use to keep track
+of the currently evaluated values that it is working with. Performing an
+operation often modifies this stack, either by removing one or more
+values, pushing one or more values on the stack, or both. 
+
+Our binary operation will also mutate the stack: It will "process" the
+`left` and `right` operants, removing them from the stack, and push the
+result of the operation, the function call, on the stack. This means
+that the net stack effect of pipe operator is that it removes 1 value
+from the value stack. We need to specify this "stack effect" of the
+opcode in the compiler.
+
+### :joystick: Exercise 7 ###
+
+- Open the file `Python/compiler.c` and scroll to the function
+  `stack_effect` at line 955. 
+
+- Skim through this function and notice that most binary operators have
+  a stack effect of `-1`:
+
+```C
+        /* Binary operators */
+        case BINARY_POWER:
+        case BINARY_MULTIPLY:
+        case BINARY_MATRIX_MULTIPLY:
+        case BINARY_MODULO:
+        case BINARY_ADD:
+        case BINARY_SUBTRACT:
+        case BINARY_SUBSCR:
+        case BINARY_FLOOR_DIVIDE:
+        case BINARY_TRUE_DIVIDE:
+            return -1;
+```
+
+- Add a line with `case BINARY_CALL_PIPE:` to this list to indicate that
+  our binary operation also has a stack effect of `-1`.
+
+- Recompile your version of Python to check your changes. It should
+  compile without errors. Actually trying to run an expression with the
+  pipe operator will still fail, as we haven't told the evaluation loop
+  what it should actually do when it evaluates the opcode yet...
+
+### 3.4. Changing the `MAGIC_NUMBER` (optional)
+
+Running the compiler takes a bit of time. That's why Python caches the
+compiled bytecode for a module in `.pyc` files (typically located in
+a `__pycache__` directory). This works fine as long as the bytecode
+doesn't change. Since we've made a change to the bytecode, by adding a
+new opcode, we need to tell Python that old `.pyc`-files are stale.[^3]
+
+[^3]: Since you probably added an opcode integer in a "gap" without
+changing existing opcode integers, trying to use an old `.pyc` file may
+still work. Still, we did create a new version of the bytecode.
+
+You can do that by incrementing the `MAGIC_NUMBER`, which acts as a 
+version number for bytecode. If Python encounters a `.pyc`-file, it will
+compare the `MAGIC_NUMBER` stored in the `.pyc` file with the current
+`MAGIC_NUMBER`. If they don't match, it will consider the file to be
+stale, which means that Python will recompile the original file.
+
+### :joystick: Exercise 8 (optional) ###
+
+- Increment the value of `MAGIC_NUMBER` in
+  `Lib/importlib/_bootstrap_external.py`
+
+- Regenerate importlib to make it aware of the new `MAGIG_NUMBER`
+  - Mac/Linux: `make regen-importlib`
+  - Windows: `PCbuild\build.bat --regen` (although this will also happen
+    automatically when you compile Python)
+
+- Recompile Python using your preferred method
+
+---
 
 
 
@@ -724,3 +824,4 @@ right, will be important later.
 [grammar-actions]: https://devguide.python.org/internals/parser/#grammar-actions
 [term-bytecode]: https://docs.python.org/3/glossary.html#term-bytecode
 [aoc-2019]: https://adventofcode.com/2019
+[devguide-magic-number]: https://devguide.python.org/internals/compiler/#introducing-new-bytecode
