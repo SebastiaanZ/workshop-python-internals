@@ -52,10 +52,18 @@ A good test would be to try and compile the version of Python
 
 ### 1.3. Preparation
 
-- Create a branch from the `v3.10.7` tag and switch to it.
+- Create a branch from the `v3.10.7` tag and switch to it:
+  - If you created a fork:
+    - `git remote add upstream <url-to-original-cpython-repo>`
+    - `git fetch upstream refs/tags/v3.10.7`
+    - `git checkout v3.10.7 -b cpython-v3.10.7`
+  - If you cloned the cpython repo directly:
+    - `git fetch origin refs/tags/v3.10.7`
+    - `git checkout v3.10.7 -b cpython-v3.10.7`
+  - In both cases, the name of your branch is `cpython-v3.10.7`.
 
-  - Windows: Make sure that you run the `PCBuild\get_externals.bat` that
-    is included in the latest commit of this new branch.
+- Windows: Make sure that you run the `PCBuild\get_externals.bat` that
+  is included in the latest commit of this new branch.
 
 - Compile Python for the first time from this "clean" state.
   - See section 1.2 for resources on how to compile Python.
