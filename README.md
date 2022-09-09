@@ -171,7 +171,7 @@ be translated into a tree structure like this:
 ![AST CallPipe Node](/img/ast-node-for-callpipe-bg.png "AST Node for our operator")
 
 As you can see, this `BinOp` node represents the binary expression by
-keeping track of the operant to the left of the operator, the operant
+keeping track of the operand to the left of the operator, the operand
 to the right of the operator, as well as the operator that combines the
 two. The problem is that the node class `CallPipe` does not exist yet,
 so we can't actually make an AST yet that uses it.
@@ -483,7 +483,7 @@ first alternative of the `sum` rule, we know that the appropriate
 operator AST node is `Add` (which is part of the `operator` list you've
 seen in exercise 2).
 
-However, to know the left and the right operant, we actually need to
+However, to know the left and the right operand, we actually need to
 know what was matched. This is what the `a=` and `b=` in the rule do:
 They assign names to whatever was matched on the left-hand side and the
 right-hand side of the operator respectively. Once we've assigned those
@@ -668,7 +668,7 @@ Python's compiler compiles the Abstract Syntax Tree by visiting all the
 nodes in the tree structure. For each node type, a dedicated
 `compiler_visit` function gets called that defines how the compiler
 will handle that node. This function may ask the compiler to visit child
-nodes of the current node, like the left or right operant of a binary
+nodes of the current node, like the left or right operand of a binary
 operation.
 
 A lot of these `compiler_visit_*` functions contain a `switch` block, 
@@ -705,7 +705,7 @@ to write the opcode for the binary operator with `ADDOP`.
 
 This makes sense if you think about it: If we actually want to perform
 the operation, we already need to know the two values that the operator
-is applied to. The order in which we visit these operants, left before
+is applied to. The order in which we visit these operands, left before
 right, will be important later.
 
 ### 3.3.1. Compiling CallPipe operators
@@ -741,7 +741,7 @@ operation often modifies this stack, either by removing one or more
 values, pushing one or more values on the stack, or both. 
 
 Our binary operation will also mutate the stack: It will "process" the
-`left` and `right` operants, removing them from the stack, and push the
+`left` and `right` operands, removing them from the stack, and push the
 result of the operation, the function call, on the stack. This means
 that the net stack effect of pipe operator is that it removes 1 value
 from the value stack. We need to specify this "stack effect" of the
@@ -808,6 +808,248 @@ stale, which means that Python will recompile the original file.
 - Recompile Python using your preferred method
 
 ---
+## 4. From bytecode to execution
+
+The compiler will now generate bytecode, a sequence of instructions or
+opcodes, that will be executed, but what will actually execute these
+instructions? This is where the **evaluation loop** comes in: This is
+the loop that will interpret the bytecode. You can find the
+implementation of the evaluation loop in `Python/ceval.c`. 
+
+### :joystick: Exercise 9 ###
+
+- Open the file `Python/ceval.c` and scroll down to line 1739. This is
+  the start of Python's main loop that will interpret the bytecode.
+
+- Now scroll down to line 1848. This is the start of a huge `switch`
+  block within the main loop that has a `case` for each opcode that
+  the evaluation loop can interpret. Scroll through a few cases to get
+  feel for the structure of a `case`.
+
+### 4.1. Interpreting a binary operator
+
+As our operator is a binary operator, we are going to look at the `case`
+for an existing binary opcode, `BINARY_SUBTRACT`. A binary subtract is
+the operation of subtracting one value from another value using the `-`
+operator, as in `4 - 3`. This is the case that handles the opcode
+`BINARY_SUBTRACT`:
+
+```C
+        case TARGET(BINARY_SUBTRACT): {
+            PyObject *right = POP();
+            PyObject *left = TOP();
+            PyObject *diff = PyNumber_Subtract(left, right);
+            Py_DECREF(right);
+            Py_DECREF(left);
+            SET_TOP(diff);
+            if (diff == NULL)
+                goto error;
+            DISPATCH();
+        }
+```
+
+### 4.1.1 Getting the operand values
+
+A binary subtract, like `a - b`, performs an operation on two operands,
+the value to the left of the operator and the value to the right of the
+operator. Remember from earlier in the workshop that the compiler will
+first write the instructions to evaluate the left operand, then the
+right operand, and only then will it write the opcode to perform the 
+operation.
+
+This means that once the evaluation loop gets to the opcode for the
+operation, the operand values have already been evaluated. While this is
+handy, it leaves us with a problem: How do we get those values to
+perform the operation?
+
+This is where the value stack comes in. When the interpreter is done
+evaluating a (sub-)expression, it will push the value onto the value
+stack to keep track of it. In our case, this means that after evaluating
+the `left` operand, the value for `left` will now be available on the
+value stack. Then the evaluation loop will evaluate the `right` operand
+and push that value **on top of** the value for the `left` operand onto
+the value stack.
+
+After evaluating the `left` and `right` operands, the value stack will
+look like this:
+
+![Valuestack after left/right](/img/value-stack-bg.png "Value stack after evaluating the left and right operand")
+
+Since the values are available on the value stack, the `case` for
+`BINARY_SUBTRACT` can get these values from the stack. This is what
+happens in the first two lines within the `case` block:
+
+```C
+            PyObject *right = POP();
+            PyObject *left = TOP();
+```
+
+The `POP()` macro will pop the last value from the value stack, which is
+the **right** operand (since it was evaluated last). The `TOP()` macro
+will "peek" at the top of the stack to get the value of the **left**
+operand, which is now at the top of the value stack after popping the
+**left** operand value. This `TOP()` macro will not remove the value
+from the stack, so the number `4` is still the top value on the stack.
+
+Now that we have the `right` and `left` values, we can calculate the
+difference by calling a cAPI function called `PyNumber_Subtract`:
+
+```C
+            PyObject *diff = PyNumber_Subtract(left, right);
+```
+
+This returns the computed difference, which we call `diff`.
+
+At this point, we're done with the `right` and `left` operand, which
+means that we'll decrease the reference counts:
+
+```C
+            Py_DECREF(right);
+            Py_DECREF(left);
+```
+
+However, what about the result of our operation? How do we make it
+available as the result of this binary expression? We make sure it's
+available on top of the stack! However, instead of just pushing it,
+we are going to replace the left operand, `4`, that was still lingering
+on top with the `SET_TOP` macro:
+
+```C
+            SET_TOP(diff);
+```
+
+All that's left to do now is to do some error handling, which you may
+ignore in this workshop:
+
+```C
+            if (diff == NULL)
+                goto error;
+```
+
+At the end of the `case`-block, we tell the evaluation loop to continue
+to the next opcode in the bytecode by calling the `DISPATCH` macro:
+
+```C
+            DISPATCH();
+```
+
+### 4.2. Implementing a case for the pipe operator
+
+As our binary operation is very similar in structure to a binary
+subtract, we can copy the `BINARY_SUBTRACT` case and modify it for our
+use. Obviously, we can't use `PyNumber_Subtract` anymore, but, luckily
+for us, there's a very convenient function we can use instead:
+`PyObject_CallOneArg(function, argument)`.
+
+### :joystick: Exercise 10 ###
+
+- Copy-paste the `case` for `TARGET(BINARY_SUBTRACT)` in the file
+  `Python/ceval.c` to create a duplicate. You can find it on line 2094.
+
+- Change the `TARGET` of the `case` to our opcode.
+
+- Thing about how you can modify this case to fit our needs.
+  - Hint `PyObject_CallOneArg` is a convencience function to call a
+    function with one argument.
+
+- After you're done, recompile Python.
+
+- Open your new version of Python and try it out!
+
+---
+
+### 5. Conclusion
+
+You should now have a working version of Python that includes a pipe
+operator. There are a few important remarks, though:
+
+- The location I picked to insert our grammar rule was convenient, as we
+  only had to change a few rule references. However, it also means that
+  precedence of grammar rules isn't ideal: If you want to use a lambda
+  expression to define a function within a pipe expression, you have to
+  surround it with parentheses.
+
+- Adding a new opcode that just calls a function with one argument isn't
+  ideal. An opcode for calling functions already exists,
+  `CALL_FUNCTION`. An actual implementation should have used this one
+  instead of defining a redundant one.
+
+In conclusion, the version we've implemented is not suitable for =
+production and only serves an educational purpose.
+
+## 6. Solutions to part 3 & 4
+
+- Modify the `binop` function in `Python/compile.c`:
+```C
+static int
+binop(operator_ty op)
+{
+    switch (op) {
+    // Other cases removed for brevity
+    case CallPipe:
+        return BINARY_CALL_PIPE;
+    default:
+        PyErr_Format(PyExc_SystemError,
+            "binary op %d should not be possible", op);
+        return 0;
+    }
+}
+```
+
+- Modify the `stack_effect` function in `Python/compile.c`:
+```C
+static int
+stack_effect(int opcode, int oparg, int jump)
+{
+    switch (opcode) {
+        // Other cases removed
+
+        /* Binary operators */
+        case BINARY_POWER:
+        case BINARY_MULTIPLY:
+        case BINARY_MATRIX_MULTIPLY:
+        case BINARY_MODULO:
+        case BINARY_ADD:
+        case BINARY_SUBTRACT:
+        case BINARY_SUBSCR:
+        case BINARY_FLOOR_DIVIDE:
+        case BINARY_TRUE_DIVIDE:
+        case BINARY_CALL_PIPE:  // <- this line was inserted
+            return -1;
+        
+        // Other cases removed
+        
+        default:
+            return PY_INVALID_STACK_EFFECT;
+    }
+    return PY_INVALID_STACK_EFFECT; /* not reachable */
+}
+```
+
+- Define a `BINARY_CALL_PIPE` opcode. I added it to a group with a few
+  other binary opcodes, but other integers work, too, as long as you
+  picked one that was not already in use.
+```python
+def_op('BINARY_CALL_PIPE', 35)
+```
+
+- Add a case for the new opcode to the evaluation loop in
+  `Python/ceval.c`. I've added mine just below the `case` for
+  `TARGET(BINARY_SUBTRACT)`, but, in principle, it can be anywhere
+  within the loop.
+```C
+        case TARGET(BINARY_CALL_PIPE): {
+            PyObject *right = POP();
+            PyObject *left = TOP();
+            PyObject *diff = PyObject_CallOneArg(right, left);
+            Py_DECREF(right);
+            Py_DECREF(left);
+            SET_TOP(diff);
+            if (diff == NULL)
+                goto error;
+            DISPATCH();
+        }
+```
 
 
 
