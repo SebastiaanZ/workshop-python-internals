@@ -653,7 +653,7 @@ are going to ignore that and add our own.
 As you might have noticed, the interface for defining an opcode is very
 simple: You simply add a function call to `def_op` and pass in the
 human-readable name of the opcode and its integer value. **There is one
-catch:** The constant on line 121, `HAVE_ARGUMENT`, is important, as it
+catch:** The constant on line 131, `HAVE_ARGUMENT`, is important, as it
 specifies that all the opcodes with that integer value and higher have
 an additional argument. The opcode that we are going to define for our
 operator does **not** take an argument, so we have to take this constant
