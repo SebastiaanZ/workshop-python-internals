@@ -663,8 +663,7 @@ into account.
 
 - Add an opcode for our operator using the name `"BINARY_CALL_PIPE"`
   - Make sure to give it an integer value below `HAVE_ARGUMENT`. Note
-    that the empty lines between the groups represent gaps in the
-    opcodes that are taken.
+    that blank lines correspond to available opcodes.
 
 - Regenerate Python's opcode tables:
   - Windows: `PCbuild\build.bat --regen`
