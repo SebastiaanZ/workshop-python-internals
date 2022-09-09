@@ -637,7 +637,7 @@ have to define it before we can modify the compiler.
 which is what our operator does. However, for educational purposes, we
 are going to ignore that and add our own.
 
-### :joystick: Exercise 5 ###
+### :joystick: Exercise 6 ###
 
 - Open the file `Lib/opcode.py`, which is the only Python-file that we
   are going to modify today, and scroll through the contents.
@@ -651,7 +651,7 @@ an additional argument. The opcode that we are going to define for our
 operator does **not** take an argument, so we have to take this constant
 into account.
 
-### :joystick: Exercise 6 ###
+### :joystick: Exercise 7 ###
 
 - Add an opcode for our operator using the name `"BINARY_CALL_PIPE"`
   - Make sure to give it an integer value below `HAVE_ARGUMENT`. Note
@@ -719,7 +719,7 @@ This `binop` function, starting at line 3607 in `Python/compile.c`,
 consists of a large `switch` block that has a `case` for all types of
 operator nodes. Except for our `CallPipe` node, that is.
 
-### :joystick: Exercise 7 ###
+### :joystick: Exercise 8 ###
 
 - Open the file `Python/compiler.c` and scroll to the function `binop`
   at line 3607. 
@@ -747,7 +747,7 @@ that the net stack effect of pipe operator is that it removes 1 value
 from the value stack. We need to specify this "stack effect" of the
 opcode in the compiler.
 
-### :joystick: Exercise 7 ###
+### :joystick: Exercise 9 ###
 
 - Open the file `Python/compiler.c` and scroll to the function
   `stack_effect` at line 955. 
@@ -795,7 +795,7 @@ compare the `MAGIC_NUMBER` stored in the `.pyc` file with the current
 `MAGIC_NUMBER`. If they don't match, it will consider the file to be
 stale, which means that Python will recompile the original file.
 
-### :joystick: Exercise 8 (optional) ###
+### :joystick: Exercise 10 (optional) ###
 
 - Increment the value of `MAGIC_NUMBER` in
   `Lib/importlib/_bootstrap_external.py`
@@ -816,7 +816,7 @@ instructions? This is where the **evaluation loop** comes in: This is
 the loop that will interpret the bytecode. You can find the
 implementation of the evaluation loop in `Python/ceval.c`. 
 
-### :joystick: Exercise 9 ###
+### :joystick: Exercise 11 ###
 
 - Open the file `Python/ceval.c` and scroll down to line 1739. This is
   the start of Python's main loop that will interpret the bytecode.
@@ -941,7 +941,7 @@ use. Obviously, we can't use `PyNumber_Subtract` anymore, but, luckily
 for us, there's a very convenient function we can use instead:
 `PyObject_CallOneArg(function, argument)`.
 
-### :joystick: Exercise 10 ###
+### :joystick: Exercise 12 ###
 
 - Copy-paste the `case` for `TARGET(BINARY_SUBTRACT)` in the file
   `Python/ceval.c` to create a duplicate. You can find it on line 2094.
