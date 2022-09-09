@@ -460,7 +460,7 @@ sum[expr_ty]:
     rule. Try to modify the `shift_expr` rule to make the parser
     consider the `pipe` rule which, in turn, should make the parser
     consider the `sum` rule.
-  - How could you use recrusion to match an arbitrary number of pipe
+  - How could you use recursion to match an arbitrary number of pipe
     operators in a "pipeline"?
   - Don't worry about things like `{ _PyAST_BinOp(a, Add, b, EXTRA) }`
     in this exercise.
@@ -728,7 +728,7 @@ operator nodes. Except for our `CallPipe` node, that is.
 
 ### :joystick: Exercise 8 ###
 
-- Open the file `Python/compiler.c` and scroll to the function `binop`
+- Open the file `Python/compile.c` and scroll to the function `binop`
   at line 3607. 
 
 - Read through the cases and note that there's a case for each AST
@@ -756,7 +756,7 @@ opcode in the compiler.
 
 ### :joystick: Exercise 9 ###
 
-- Open the file `Python/compiler.c` and scroll to the function
+- Open the file `Python/compile.c` and scroll to the function
   `stack_effect` at line 955. 
 
 - Skim through this function and notice that most binary operators have
