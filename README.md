@@ -667,7 +667,7 @@ into account.
 
 - Regenerate Python's opcode tables:
   - Windows: `PCbuild\build.bat --regen`
-  - Mac/Linux: `make regen-opcode`
+  - Mac/Linux: `make regen-opcode && make regen-opcode-targets`
 
 ### 3.3. Python's compiler
 
