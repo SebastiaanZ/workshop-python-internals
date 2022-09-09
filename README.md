@@ -626,7 +626,7 @@ def anonymous_lambda_function(x, y):
     return 2 * x + y
 ```
 
-### 3.1.1 Adding an opcode for the operator
+### 3.2. Adding an opcode for the operator
 
 The compiler needs to be able to compile the AST node for the new
 operator into a bytecode instruction or opcode. There's just one tiny
@@ -661,6 +661,54 @@ into account.
 - Regenerate Python's opcode tables:
   - Windows: `PCbuild\build.bat --regen`
   - Mac/Linux: `make regen-opcode`
+
+### 3.3. Python's compiler
+
+Python's compiler compiles the Abstract Syntax Tree by visiting all the
+nodes in the tree structure. For each node type, a dedicated
+`compiler_visit` function gets called that defines how the compiler
+will handle that node. This function may ask the compiler to visit child
+nodes of the current node, like the left or right operant of a binary
+operation.
+
+A lot of these `compiler_visit_*` functions contain a `switch` block, 
+like this simplified version of the `compiler_visit_expr1` function
+below. This function eventually gets called when the compiler visits an
+expression type node, including expressions with a binary operator like
+our pipe operator. 
+
+```C
+static int compiler_visit_expr1(struct compiler *c, expr_ty e)
+{
+    switch (e->kind) {
+    // Other cases removed
+    case BinOp_kind:
+        VISIT(c, expr, e->v.BinOp.left);
+        VISIT(c, expr, e->v.BinOp.right);
+        ADDOP(c, binop(e->v.BinOp.op));
+        break;
+    }
+    // Other cases removed
+}
+```
+
+The `switch` block here has a `case` for expressions of the `BinOp_kind`
+that instructs the compiler what it should do when it encounters this
+kind of expression.
+
+It's important to note that the first thing the compiler is instructed
+to do is to VISIT the left-hand side of the operator so it can write the
+bytecode instructions to resolve that value, then it is instructed to
+VISIT the right-hand side to do the same, and only then is it instructed
+to write the opcode for the binary operator with `ADDOP`.
+
+This makes sense if you think about it: If we actually want to perform
+the operation, we already need to know the two values that the operator
+is applied to. The order in which we visit these operants, left before
+right, will be important later.
+
+### 3.3.1. Compiling CallPipe operators
+
 
 
 [cpython-v3.10.7]: https://github.com/python/cpython/tree/v3.10.7
